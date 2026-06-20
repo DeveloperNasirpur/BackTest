@@ -1,70 +1,62 @@
 """
-RSI Strategy — sample strategy using trex indicators
-  RSI < 30 → open Long
-  RSI > 70 → open Short
+RSI Strategy — sample using the new Strategy base class.
+
+Logic:
+  RSI < 30  → buy  (oversold)
+  RSI > 70  → sell (overbought)
+  Close all positions when RSI crosses 50
 """
-from backtest.exchange.dataclass.classdata import StrategyBase, Order, PositionIsolate
-from backtest.exchange.dataclass.enums import Side
+import trex
+from backtest import Strategy
 from trex.base.ohlcv import OHLCV
 
 
-class RSIStrategy(StrategyBase):
-    __author__ = "nasirpoor"
+class RSIStrategy(Strategy):
+    __author__  = "nasirpoor"
     __version__ = "2.0"
 
-    def __init__(self):
-        self._rsi_value: float | None = None
-        self._usdt_per_trade: float = 100.0
-        # exchange and user_id are wired externally (see main.py)
-        self.exchange = None
-        self.user_id = None
+    # ── config ────────────────────────────────────────────────────────────
+    symbol    = "BTCUSDT"
+    timeframe = "1m"
+    deposit   = 10_000.0
+    leverage  = 10
 
-    # ── trex listener: called every time RSI is computed ─────────────────────
-    def on_rsi(self, value: float) -> None:
-        self._rsi_value = value
+    _usdt_per_trade: float = 100.0
 
-    # ── called by exchange.run() via on_bar before each candle ───────────────
+    # ── step 1: register indicators ───────────────────────────────────────
+    def indicators(self):
+        trex.rsi(self.symbol, self.timeframe, period=14, listener=self._on_rsi)
+        trex.ema(self.symbol, self.timeframe, period=20,  visible=True)
+
+    def _on_rsi(self, value: float):
+        self._rsi = value
+
+    # ── step 2: strategy logic per bar ───────────────────────────────────
     def on_kline(self, ohlcv: OHLCV) -> None:
-        if self._rsi_value is None or self.exchange is None:
+        rsi = getattr(self, "_rsi", None)
+        if rsi is None:
             return
 
-        symbol = ohlcv.symbol or "BTCUSDT"
+        has_position = len(self.positions) > 0
 
-        if self._rsi_value < 30:
-            self.exchange.open_long(
-                symbol=symbol,
-                user_id=self.user_id,
-                usdt=self._usdt_per_trade,
-            )
+        if rsi < 30 and not has_position:
+            _id, msg = self.buy(usdt=self._usdt_per_trade)
 
-        elif self._rsi_value > 70:
-            self.exchange.open_short(
-                symbol=symbol,
-                user_id=self.user_id,
-                usdt=self._usdt_per_trade,
-            )
+        elif rsi > 70 and not has_position:
+            _id, msg = self.sell(usdt=self._usdt_per_trade)
 
-    # ── required abstract stubs ───────────────────────────────────────────────
-    def indicators(self): pass
-    def idle(self, ohlcv: OHLCV): pass
-    def finder(self): pass
-    def complete_provide(self): pass
+        elif 45 < rsi < 55 and has_position:
+            self.close()   # close all when RSI is neutral
 
-    def on_position_long(self, symbol: str, _id: int): pass
-    def on_position_short(self, symbol: str, _id: int): pass
-    def waiting_entry_short(self, symbol: str, _id: int): pass
-    def waiting_entry_long(self, symbol: str, _id: int): pass
-    def order_cancelled(self, order: Order): pass
-    def order_triggered(self, order: Order, ohlcv: OHLCV): pass
-    def position_closed(self, pos: PositionIsolate): pass
-    def position_triggered(self, pos: PositionIsolate): pass
-    def position_stopped(self, pos: PositionIsolate): pass
-    def position_liquidated(self, pos: PositionIsolate): pass
-    def position_opened(self, pos): pass
-    def liquid_balance(self): pass
-    def deposited(self, balance: float): pass
-    def new_balance(self, balance: float): pass
-    def order_history(self, orders): pass
-    def position_history(self, pos): pass
-    def order_online(self, orders): pass
-    def position_online(self, pos): pass
+    # ── optional event hooks ──────────────────────────────────────────────
+    def on_position_opened(self, pos):
+        print(f"[{pos.open_time}] Position opened: {pos.side.value} @ {pos.entry:.2f}")
+
+    def on_position_profit(self, pos):
+        print(f"[{pos.close_time}] TP hit  +${pos.pnl_usdt:.2f}")
+
+    def on_position_loss(self, pos):
+        print(f"[{pos.close_time}] SL hit  ${pos.pnl_usdt:.2f}")
+
+    def on_position_closed(self, pos):
+        print(f"[{pos.close_time}] Closed  ${pos.pnl_usdt:.2f}")

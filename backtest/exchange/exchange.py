@@ -47,6 +47,7 @@ class Exchange(Api):
         self._users: dict[str, Union[IsolateUser, CrossUser]] = {}
         self.taker_fee: float = taker_fee
         self.slippage: float = slippage
+        self._initial_deposits: dict[str, float] = {}
 
     def change_to_isolated(self, symbol: str, user_id: str, event_host:HostEventUser) -> tuple[bool,str]:
         self.valid_user(user_id)
@@ -112,6 +113,9 @@ class Exchange(Api):
     def deposit(self, user_id: str, usdt: float) -> bool:
         self.valid_user(user_id)
         self._users[user_id].deposit(usdt)
+        self._initial_deposits[user_id] = (
+            self._initial_deposits.get(user_id, 0.0) + usdt
+        )
         return True
 
     def get_balance(self, user_id: str) -> float:
