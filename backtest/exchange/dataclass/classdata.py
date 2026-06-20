@@ -877,16 +877,21 @@ class BaseUserParameter( OrderEvent):
         self.user_event.order_cancelled(order)
         self._ids_deprecate_order.append(order.id)
 
-    def close_position(self, pos_id:int) -> Union[None, PositionIsolate]:
-        if self.valid_position_id(pos_id):
-            pos: PositionIsolate = self._online_position[pos_id]
-            pos.state = PositionState.STOPPED_BY_CLOSE if pos.pnl_usdt < 0 else PositionState.TRIGGERED_BY_CLOSE
-            self._online_position[pos_id] = pos
-
-            pos.compute.close_position(self.ohlcv)
-            self._ids_deprecate_position.append(pos_id)
-
-            self.user_event.position_closed(pos)
+    def close_position(self, pos_id: int) -> None:
+        if not self.valid_position_id(pos_id):
+            return None
+        pos: PositionIsolate = self._online_position[pos_id]
+        # Compute final PnL at the current bar's close price
+        if pos.side == Side.LONG:
+            pos.compute._pnl_long(self.ohlcv.close)
+        else:
+            pos.compute._pnl_short(self.ohlcv.close)
+        pos.state = (PositionState.TRIGGERED_BY_CLOSE
+                     if pos.pnl_usdt >= 0
+                     else PositionState.STOPPED_BY_CLOSE)
+        # Route through IsolateUser/CrossUser.position_closed which handles:
+        # _return_margin_to_balance, user_event.position_closed, _ids_deprecate_position
+        self.position_closed(pos)
         return None
 
 
