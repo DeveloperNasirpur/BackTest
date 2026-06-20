@@ -70,9 +70,13 @@ def position_open_drawing(
         "style":     {
             "color":       color,
             "lineWidth":   1,
+            "lineStyle":   0,
             "fillColor":   color,
             "fillOpacity": 0.12,
+            "fontSize":    12,
             "showLabels":  True,
+            "extendLeft":  False,
+            "extendRight": False,
         },
         "paneId":    "main",
         "locked":    True,
@@ -85,8 +89,8 @@ def position_open_drawing(
             "stopLoss":   sl,
             "takeProfit": tp,
             "quantity":   pos.margin,
-            "risk":       round(risk,   2),
-            "reward":     round(reward, 2),
+            "risk":       round(abs(pos.entry - sl),  8),
+            "reward":     round(abs(tp - pos.entry),  8),
         },
     }
 
@@ -132,9 +136,13 @@ def position_close_drawing(
         "style":     {
             "color":       color,
             "lineWidth":   1,
+            "lineStyle":   0,
             "fillColor":   color,
             "fillOpacity": 0.08,
+            "fontSize":    12,
             "showLabels":  True,
+            "extendLeft":  False,
+            "extendRight": False,
         },
         "text":      label,
         "paneId":    "main",
@@ -148,8 +156,8 @@ def position_close_drawing(
             "stopLoss":   sl,
             "takeProfit": tp,
             "quantity":   pos.margin,
-            "risk":       round(risk,   2),
-            "reward":     round(reward, 2),
+            "risk":       round(abs(pos.entry - sl),  8),
+            "reward":     round(abs(tp - pos.entry),  8),
         },
     }
 
