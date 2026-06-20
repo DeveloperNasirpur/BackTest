@@ -72,6 +72,7 @@ class Strategy(HostEventUser, ABC):
     # ── internal, wired by Backtest ───────────────────────────────────────
     _exchange: Exchange | None = None
     _user_id: str | None = None
+    _bar_interval_sec: int = 60
 
     def __init__(self):
         pass
@@ -219,27 +220,34 @@ class Strategy(HostEventUser, ABC):
     def on_order_cancelled(self, order: Order) -> None:
         """Called when an order is cancelled."""
 
-    # ── HostEventUser interface (wired to user hooks above) ───────────────
+    # ── HostEventUser interface (wired to user hooks + chart drawings) ───
 
     def position_opened(self, pos):
+        self._draw_position_open(pos)
         self.on_position_opened(pos)
 
     def position_closed(self, pos):
+        self._draw_position_close(pos)
         self.on_position_closed(pos)
 
     def position_triggered(self, pos):
+        self._draw_position_close(pos)
         self.on_position_profit(pos)
 
     def position_stopped(self, pos):
+        self._draw_position_close(pos)
         self.on_position_loss(pos)
 
     def position_liquidated(self, pos):
+        self._draw_position_close(pos)
         self.on_position_liquidated(pos)
 
     def order_placed(self, order: Order):
+        self._draw_order_place(order)
         self.on_order_placed(order)
 
     def order_cancelled(self, order: Order):
+        self._draw_order_cancel(order)
         self.on_order_cancelled(order)
 
     # ── silent no-ops for the rest of the interface ───────────────────────
@@ -256,6 +264,51 @@ class Strategy(HostEventUser, ABC):
     def position_history(self, pos: dict): pass
     def order_online(self, orders: dict): pass
     def position_online(self, pos: dict): pass
+
+    # ── chart drawing helpers (auto-called by event hooks) ───────────────
+
+    def _draw_position_open(self, pos) -> None:
+        if not self.broadcast:
+            return
+        try:
+            import trex as _trex
+            from backtest.drawings import position_open_drawing
+            _trex.broadcast_drawing(
+                position_open_drawing(pos, self._bar_interval_sec)
+            )
+        except Exception:
+            pass
+
+    def _draw_position_close(self, pos) -> None:
+        if not self.broadcast:
+            return
+        try:
+            import trex as _trex
+            from backtest.drawings import position_close_drawing
+            _trex.broadcast_drawing(
+                position_close_drawing(pos, self._bar_interval_sec)
+            )
+        except Exception:
+            pass
+
+    def _draw_order_place(self, order: Order) -> None:
+        if not self.broadcast or order.order_type.value == "MARKET":
+            return
+        try:
+            import trex as _trex
+            from backtest.drawings import order_drawing
+            _trex.broadcast_drawing(order_drawing(order))
+        except Exception:
+            pass
+
+    def _draw_order_cancel(self, order: Order) -> None:
+        if not self.broadcast:
+            return
+        try:
+            import trex as _trex
+            _trex.delete_drawing(f"order_{order.id}")
+        except Exception:
+            pass
 
     # ── internal ──────────────────────────────────────────────────────────
 
