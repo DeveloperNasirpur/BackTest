@@ -375,15 +375,14 @@ class Order:
     triggered_time:datetime = None
     placed_time:datetime = None
 
-    def __init__(self, callback:OrderEvent):
+    def __init__(self, callback: OrderEvent):
         self.event = callback
-        if self.side.value.__eq__(Side.SHORT.value):
-            self.triggered = self._trigger_short
-        else:
-            self._triggered = self._trigger_long
 
-    def kline(self, ohlcv:OHLCV):
-        self._triggered(ohlcv)
+    def kline(self, ohlcv: OHLCV):
+        if self.side == Side.SHORT:
+            self._trigger_short(ohlcv)
+        else:
+            self._trigger_long(ohlcv)
 
     def _trigger_short(self, ohlcv:OHLCV) :
         if   ohlcv.high >= self.entry:
@@ -448,11 +447,11 @@ class ComputePosition:
                 return True
         return False
 
-    def _stopped_long(self, ohlcv:OHLCV) -> bool:
+    def _stopped_long(self, ohlcv: OHLCV) -> bool:
         if self.position.stop_price:
             if ohlcv.low <= self.position.stop_price:
                 self.position.state = PositionState.STOPPED
-                self._pnl_short(self.position.stop_price)
+                self._pnl_long(self.position.stop_price)
                 self.position.event_callback.position_stopped(self.position)
                 return True
         return False
@@ -726,9 +725,6 @@ class BaseUserParameter( OrderEvent):
 
     def add_order(self,order:Order) -> tuple[bool, str] :
         if not self._get_margin_from_balance(order.usdt):
-
-            a= 1
-            input(" Not Enough Usdt Available . Do You Want Run ... ? ")
             return False, "Not enough usdt available"
 
         order.leverage = self._leverage[order.symbol]
@@ -777,22 +773,21 @@ class BaseUserParameter( OrderEvent):
             if  entry:
                 order.entry = entry
             if stop_price:
-                if order.side.value().__eq__(Side.SHORT.value()):
-                    if take_profit < entry:
-                        return False, "Stop Short Order Must is Higher From Entry"
+                if order.side == Side.SHORT:
+                    if stop_price < entry:
+                        return False, "Stop Short Order Must Be Higher Than Entry"
                 else:
-                    if take_profit > entry:
-                        return False, "Stop Long Order Must is Lower From Entry"
+                    if stop_price > entry:
+                        return False, "Stop Long Order Must Be Lower Than Entry"
                 order.stop_price = stop_price
 
             if take_profit:
-                if order.side.value().__eq__(Side.SHORT.value()) :
+                if order.side == Side.SHORT:
                     if take_profit > entry:
-                        return False, "Target Tp Short Order Must is lower From Entry"
+                        return False, "Target Tp Short Order Must Be Lower Than Entry"
                 else:
                     if take_profit < entry:
-                        return False, "Target Tp Long Order Must is Higher From Entry"
-
+                        return False, "Target Tp Long Order Must Be Higher Than Entry"
                 order.take_profit = take_profit
 
             self._online_orders[order_id] = order
@@ -801,33 +796,34 @@ class BaseUserParameter( OrderEvent):
         return False, "Order Is Not Modified. Order.id is not in Online Orders"
 
     def modify_position(self,
-            pos_id:int ,tp:float= None, stop:float = None) -> tuple[bool, str]:
+            pos_id: int, tp: float = None, stop: float = None) -> tuple[bool, str]:
         if not self.valid_position_id(pos_id):
             return False, "Invalid Position Id"
 
-        pos:BasePosition = self._online_position[pos_id]
-        if pos.side.value.__eq__(Side.LONG.value()):
-            if tp:
-                if tp < pos.entry or tp < self.ohlcv.close:
-                    return False , "Tp Long Must Be Higher Close Or Entry"
-                pos.take_profit = tp
+        pos: BasePosition = self._online_position[pos_id]
+        close = self.ohlcv.close if self.ohlcv else pos.entry
 
-                if stop > pos.entry or stop > self.ohlcv.close:
-                    return False, "Stop Long Must Be Lower Close Or Entry"
+        if pos.side == Side.LONG:
+            if tp is not None:
+                if tp < pos.entry or tp < close:
+                    return False, "Tp Long Must Be Higher Than Close And Entry"
+                pos.take_profit = tp
+            if stop is not None:
+                if stop > pos.entry or stop > close:
+                    return False, "Stop Long Must Be Lower Than Close And Entry"
                 pos.stop_price = stop
 
-        if pos.side.value.__eq__(Side.SHORT.value()):
-            if tp:
-                if tp > pos.entry or tp > self.ohlcv.close:
-                    return False, "Tp Short Must Be Lower Close Or Entry"
+        elif pos.side == Side.SHORT:
+            if tp is not None:
+                if tp > pos.entry or tp > close:
+                    return False, "Tp Short Must Be Lower Than Close And Entry"
                 pos.take_profit = tp
-
-                if stop < pos.entry or stop < self.ohlcv.close:
-                    return False, "Stop Long Must Be Higher Close Or Entry"
+            if stop is not None:
+                if stop < pos.entry or stop < close:
+                    return False, "Stop Short Must Be Higher Than Close And Entry"
                 pos.stop_price = stop
 
-
-        return False, "None"
+        return True, "Position Modified"
 
     def _deprecate_event(self):
         for _id in self._ids_deprecate_order:

@@ -7,16 +7,16 @@ class Side(str, Enum):
 
 class OrderType(str, Enum):
     MARKET = "MARKET"
-    LIMIT =  "LIMIT"
+    LIMIT  = "LIMIT"
 
 class PositionState(str, Enum):
-    OPEN      = "OPEN"
-    TRIGGERED = "TRIGGERED"
-    STOPPED   = "STOPPED"
+    OPEN               = "OPEN"
+    TRIGGERED          = "TRIGGERED"
+    STOPPED            = "STOPPED"
     TRIGGERED_BY_CLOSE = "TRIGGERED_BY_CLOSE"
-    STOPPED_BY_CLOSE = "TRIGGERED_BY_CLOSE"
-    LIQUID = "LIQUID"
+    STOPPED_BY_CLOSE   = "STOPPED_BY_CLOSE"
+    LIQUID             = "LIQUID"
 
 class LiquidyType(str, Enum):
     ISOLATED = "ISOLATED"
-    CROSS = "CROSS"
+    CROSS    = "CROSS"
