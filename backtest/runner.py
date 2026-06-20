@@ -153,12 +153,13 @@ class Backtest:
             )
 
         for i, bar in enumerate(candles):
-            # a) push to trex → indicators computed → listeners fired
-            if s.broadcast:
-                try:
-                    _trex.push(_ohlcv_to_bar(bar), symbol=s.symbol)
-                except Exception:
-                    pass
+            # a) push to trex → indicators recomputed → listeners fired
+            #    Always push regardless of broadcast — indicators must run even when
+            #    the chart stream is disabled.
+            try:
+                _trex.push(_ohlcv_to_bar(bar), symbol=s.symbol)
+            except Exception:
+                pass
 
             # b) exchange processes existing limit orders & updates positions
             #    (also sets user.ohlcv so market orders in on_kline get current close)

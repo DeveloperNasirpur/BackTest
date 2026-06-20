@@ -27,10 +27,15 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
         self.user_event.waiting_entry_long(symbol, _id)
 
     def _add_position_market(self, order: Order) -> bool:
-        order.entry = self.ohlcv.close
-        self._online_position[order.id] = PositionCross(order, self.ohlcv.time, self)
-        self.user_event.position_opened(self.online_positions[order.id])
-
+        from backtest.exchange.dataclass.enums import Side
+        slip = getattr(self, '_slippage', 0.0)
+        if order.side == Side.LONG:
+            order.entry = self.ohlcv.close * (1 + slip)
+        else:
+            order.entry = self.ohlcv.close * (1 - slip)
+        pos = PositionCross(order, self.ohlcv.time, self)
+        self._online_position[order.id] = pos
+        self.user_event.position_opened(pos)
         return True
 
     def order_triggered(self, order: Order, ohlcv: OHLCV):
@@ -47,15 +52,14 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
 
     def position_triggered(self, pos: PositionCross):
         pos.close_time = self.ohlcv.time
+        self._return_margin_to_balance(pos.margin, pos.pnl_usdt)
         self.user_event.position_triggered(pos)
-        self._return_margin_to_balance(pos.margin , pos.pnl_usdt)
-
         self._ids_deprecate_position.append(pos.id)
 
     def position_stopped(self, pos: PositionCross):
         pos.close_time = self.ohlcv.time
+        self._return_margin_to_balance(pos.margin, pos.pnl_usdt)
         self.user_event.position_stopped(pos)
-        self._return_margin_to_balance(pos.margin , pos.pnl_usdt)
         self._ids_deprecate_position.append(pos.id)
 
     def position_higher_loss_pnl(self, _id: int, usdt_pnl: float):

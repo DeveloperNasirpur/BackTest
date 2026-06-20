@@ -106,11 +106,12 @@ def position_close_drawing(
     t0        = _ts(pos.open_time)
     t1        = _ts(pos.close_time) if pos.close_time else t0 + bar_interval_sec
 
-    # exit price: use whatever price produced the final pnl
+    # exit price back-calculated from pos.pnl which is (price-entry)/entry for long
+    # and (entry-price)/entry for short — so no leverage factor here
     if long:
-        exit_p = pos.entry * (1 + pos.pnl / pos.leverage) if pos.leverage else pos.entry
+        exit_p = pos.entry * (1 + pos.pnl)
     else:
-        exit_p = pos.entry * (1 - pos.pnl / pos.leverage) if pos.leverage else pos.entry
+        exit_p = pos.entry * (1 - pos.pnl)
 
     sl = pos.stop_price  or (pos.entry * (0.98 if long else 1.02))
     tp = pos.take_profit or (pos.entry * (1.04 if long else 0.96))
