@@ -544,13 +544,19 @@ class PositionIsolate(BasePosition):
         self.compute = ComputePosition(self)
         self._liquidated:Callable[[OHLCV], bool] = self._analyse_liquid_long\
             if self.side.value.__eq__(Side.LONG.value) else self._analyse_liquid_short
+        # Calculate actual liquidation price based on leverage
+        if order.leverage and order.leverage > 0:
+            if self.side == Side.LONG:
+                self.liquidy = self.entry * (1.0 - 1.0 / order.leverage)
+            else:
+                self.liquidy = self.entry * (1.0 + 1.0 / order.leverage)
 
     def compute_position(self, ohlcv: OHLCV):
         if ohlcv.time == self.open_time:
             return False
         self.bars += 1
         self.compute.update_pnl(ohlcv)
-        if not self.compute.stopped(ohlcv) or not self._liquidated(ohlcv):
+        if not self.compute.stopped(ohlcv) and not self._liquidated(ohlcv):
             self.compute.triggered(ohlcv)
         return None
 
@@ -752,48 +758,56 @@ class BaseUserParameter( OrderEvent):
                      usdt: float = None,entry: float = None, stop_price: float = None,take_profit: float = None
                      ) -> tuple[bool, str] :
 
-        if order_id in self._online_orders:
-            order:Order = self._online_orders.pop(order_id)
-            if side:
-                order.side = side
-            if order_type:
-                order.order_type = order_type
+        if order_id not in self._online_orders:
+            return False, "Order Is Not Modified. Order.id is not in Online Orders"
 
-            if usdt:
-                self._return_margin_to_balance(order.usdt)
+        order: Order = self._online_orders[order_id]
 
-                if self._has_enough_in_balance(usdt):
-                    if self._get_margin_from_balance(usdt):
-                        order.usdt = usdt
-                    else: return False, "Order {} Is Cleared After Modify . Not Enough Usdt In Balance".format(order.symbol)
-                else:
-                    self._get_margin_from_balance(order.usdt)
-                    return False, "Order {} Is Not Modify Usdt Not Enough In Balance".format(order.symbol)
+        # Determine the effective entry for validation (new value or current)
+        eff_entry = entry if entry is not None else order.entry
+        eff_side  = side  if side  is not None else order.side
 
-            if  entry:
-                order.entry = entry
-            if stop_price:
-                if order.side == Side.SHORT:
-                    if stop_price < entry:
-                        return False, "Stop Short Order Must Be Higher Than Entry"
-                else:
-                    if stop_price > entry:
-                        return False, "Stop Long Order Must Be Lower Than Entry"
-                order.stop_price = stop_price
+        # Validate stop_price and take_profit BEFORE making any changes
+        if stop_price is not None:
+            if eff_side == Side.SHORT:
+                if stop_price < eff_entry:
+                    return False, "Stop Short Order Must Be Higher Than Entry"
+            else:
+                if stop_price > eff_entry:
+                    return False, "Stop Long Order Must Be Lower Than Entry"
 
-            if take_profit:
-                if order.side == Side.SHORT:
-                    if take_profit > entry:
-                        return False, "Target Tp Short Order Must Be Lower Than Entry"
-                else:
-                    if take_profit < entry:
-                        return False, "Target Tp Long Order Must Be Higher Than Entry"
-                order.take_profit = take_profit
+        if take_profit is not None:
+            if eff_side == Side.SHORT:
+                if take_profit > eff_entry:
+                    return False, "Target Tp Short Order Must Be Lower Than Entry"
+            else:
+                if take_profit < eff_entry:
+                    return False, "Target Tp Long Order Must Be Higher Than Entry"
 
-            self._online_orders[order_id] = order
-            return True, "Order Is Modified"
+        # Validate new usdt against available balance
+        if usdt is not None and usdt != order.usdt:
+            extra = usdt - order.usdt
+            if extra > 0 and not self._has_enough_in_balance(extra):
+                return False, "Order {} Is Not Modify Usdt Not Enough In Balance".format(order.symbol)
 
-        return False, "Order Is Not Modified. Order.id is not in Online Orders"
+        # All validations passed — apply changes
+        if side is not None:
+            order.side = side
+        if order_type is not None:
+            order.order_type = order_type
+        if usdt is not None and usdt != order.usdt:
+            # Return old margin and lock new margin
+            self._return_margin_to_balance(order.usdt)
+            self._get_margin_from_balance(usdt)
+            order.usdt = usdt
+        if entry is not None:
+            order.entry = entry
+        if stop_price is not None:
+            order.stop_price = stop_price
+        if take_profit is not None:
+            order.take_profit = take_profit
+
+        return True, "Order Is Modified"
 
     def modify_position(self,
             pos_id: int, tp: float = None, stop: float = None) -> tuple[bool, str]:

@@ -94,7 +94,7 @@ class Exchange(Api):
 
     def valid_user(self, user_id: str) -> bool:
         if  user_id not in self._users.keys():
-            raise f"{user_id} is not singUp"
+            raise RuntimeError(f"{user_id} is not singUp")
         return True
 
         # ==================================================================================
@@ -255,8 +255,8 @@ class Exchange(Api):
            order
         )
         if res:
-            return 0, msg
-        return order.id, msg
+            return order.id, msg
+        return 0, msg
 
     def close_position(
             self,
@@ -284,8 +284,8 @@ class Exchange(Api):
             order
         )
         if res:
-            return 0, msg
-        return order.id, msg
+            return order.id, msg
+        return 0, msg
 
     def set_target(
             self,
