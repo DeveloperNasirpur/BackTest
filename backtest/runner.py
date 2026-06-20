@@ -149,11 +149,12 @@ class Backtest:
                 except Exception:
                     pass
 
-            # b) strategy logic (may place orders)
-            s.on_kline(bar)
-
-            # c) exchange processes orders & updates positions
+            # b) exchange processes existing limit orders & updates positions
+            #    (also sets user.ohlcv so market orders in on_kline get current close)
             exchange.kline(bar)
+
+            # c) strategy logic: places new orders (market → current close, limit → next bar)
+            s.on_kline(bar)
 
             if progress and total >= 10_000 and (i + 1) % 10_000 == 0:
                 pct = (i + 1) / total * 100

@@ -1,6 +1,7 @@
 
 from backtest.exchange.dataclass.classdata import Order, PositionIsolate, BaseUserParameter
 from backtest.exchange.dataclass.classdata import PositionIsolateEvent, HostEventUser
+from backtest.exchange.dataclass.enums import Side
 from trex import OHLCV
 class IsolateUser(BaseUserParameter, PositionIsolateEvent):
 
@@ -32,7 +33,7 @@ class IsolateUser(BaseUserParameter, PositionIsolateEvent):
     def _add_position_market(self, order: Order) -> bool:
         # Apply slippage: long buys slightly higher, short buys slightly lower
         slip = getattr(self, '_slippage', 0.0)
-        if order.side.value == "LONG":
+        if order.side == Side.LONG:
             order.entry = self.ohlcv.close * (1 + slip)
         else:
             order.entry = self.ohlcv.close * (1 - slip)

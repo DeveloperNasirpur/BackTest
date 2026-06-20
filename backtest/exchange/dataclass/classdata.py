@@ -546,7 +546,7 @@ class PositionIsolate(BasePosition):
             if self.side.value.__eq__(Side.LONG.value) else self._analyse_liquid_short
 
     def compute_position(self, ohlcv: OHLCV):
-        if ohlcv.time == self.open_time.time():
+        if ohlcv.time == self.open_time:
             return False
         self.bars += 1
         self.compute.update_pnl(ohlcv)

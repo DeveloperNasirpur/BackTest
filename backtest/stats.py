@@ -78,21 +78,16 @@ class BacktestResult:
         result = cls()
 
         for user_id, user in exchange._users.items():
-            initial = user._balance + user._frees_balance
-            # walk history to reconstruct starting capital
-            deposited_sum = sum(
-                p.margin for p in user._history_position.values()
-            )
-
-            result.final_balance   = user._balance + user._frees_balance
-            result.initial_balance = exchange._initial_deposits.get(user_id, result.final_balance)
+            initial = exchange._initial_deposits.get(user_id, 0.0)
+            result.initial_balance += initial
+            result.final_balance   += user._balance + user._frees_balance
 
             all_pos: list[Union[PositionIsolate, PositionCross]] = list(
                 user._history_position.values()
             )
             result.positions.extend(all_pos)
 
-            equity = result.initial_balance
+            equity = initial
             peak   = equity
 
             for pos in all_pos:
