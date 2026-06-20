@@ -443,7 +443,7 @@ class ComputePosition:
             if ohlcv.high >= self.position.stop_price:
                 self.position.state = PositionState.STOPPED
                 self._pnl_short(self.position.stop_price)
-                self.position.base_event.position_stopped(self.position)
+                self.position.event_callback.position_stopped(self.position)
                 return True
         return False
 
@@ -733,7 +733,7 @@ class BaseUserParameter( OrderEvent):
         if not self._get_margin_from_balance(order.usdt):
             return False, "Not enough usdt available"
 
-        order.leverage = self._leverage[order.symbol]
+        order.leverage = self.leverage(order.symbol)  # safe: auto-defaults to 10 if unset
 
         if order.order_type.value.__eq__(OrderType.MARKET.value):
             order.entry = self.ohlcv.close
@@ -819,22 +819,26 @@ class BaseUserParameter( OrderEvent):
 
         if pos.side == Side.LONG:
             if tp is not None:
-                if tp < pos.entry or tp < close:
-                    return False, "Tp Long Must Be Higher Than Close And Entry"
+                # TP must be above current price to still be reachable
+                if tp <= close:
+                    return False, "Tp Long Must Be Higher Than Current Price"
                 pos.take_profit = tp
             if stop is not None:
-                if stop > pos.entry or stop > close:
-                    return False, "Stop Long Must Be Lower Than Close And Entry"
+                # SL must be below current price to not trigger immediately
+                if stop >= close:
+                    return False, "Stop Long Must Be Lower Than Current Price"
                 pos.stop_price = stop
 
         elif pos.side == Side.SHORT:
             if tp is not None:
-                if tp > pos.entry or tp > close:
-                    return False, "Tp Short Must Be Lower Than Close And Entry"
+                # TP must be below current price to still be reachable
+                if tp >= close:
+                    return False, "Tp Short Must Be Lower Than Current Price"
                 pos.take_profit = tp
             if stop is not None:
-                if stop < pos.entry or stop < close:
-                    return False, "Stop Short Must Be Higher Than Close And Entry"
+                # SL must be above current price to not trigger immediately
+                if stop <= close:
+                    return False, "Stop Short Must Be Higher Than Current Price"
                 pos.stop_price = stop
 
         return True, "Position Modified"

@@ -71,6 +71,12 @@ def load_csv(
                 continue
 
     bars.sort(key=lambda b: b.time)
+    if not bars:
+        raise ValueError(
+            f"load_csv() loaded 0 bars from '{path}'. "
+            f"Check column names: time_col={time_col!r}, open_col={open_col!r}, "
+            f"high_col={high_col!r}, low_col={low_col!r}, close_col={close_col!r}."
+        )
     return bars
 
 
@@ -111,6 +117,12 @@ def load_dicts(
         except (KeyError, ValueError):
             continue
     bars.sort(key=lambda b: b.time)
+    if not bars:
+        raise ValueError(
+            f"load_dicts() loaded 0 bars. "
+            f"Check key names: time_key={time_key!r}, open_key={open_key!r}, "
+            f"high_key={high_key!r}, low_key={low_key!r}, close_key={close_key!r}."
+        )
     return bars
 
 
@@ -136,7 +148,7 @@ def load_lists(
                 high=float(row[idx["high"]]),
                 low=float(row[idx["low"]]),
                 close=float(row[idx["close"]]),
-                volume=float(row[idx.get("volume", -1)]) if "volume" in idx else 0.0,
+                volume=float(row[idx["volume"]]) if "volume" in idx else 0.0,
                 symbol=symbol,
                 str_time=timeframe,
             )

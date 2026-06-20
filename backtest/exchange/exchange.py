@@ -239,6 +239,7 @@ class Exchange(Api):
         order.take_profit = take_profit
         order.usdt = usdt if usdt else 0.0
         order.entry = entry
+        order.placed_time = self.ohlcv.time if self.ohlcv else None
         return order
 
     def open_long(self,
