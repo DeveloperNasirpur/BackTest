@@ -36,6 +36,7 @@ from backtest.exchange.dataclass.classdata import StrategyBase
 from backtest.exchange.dataclass.enums import Side, OrderType, PositionState
 from backtest.utils.loader import StrategyLoader
 from backtest.utils.candle_loader import load_csv, load_dicts, load_lists
+from backtest.utils.demo import demo_candles
 from backtest.stats import BacktestResult
 
 __version__ = "2.0.0"
@@ -45,6 +46,7 @@ __all__ = [
     "Backtest",
     "Strategy",
     # ── data loading ──────────────────────────────────────────────────────
+    "demo_candles",
     "load_csv",
     "load_dicts",
     "load_lists",
