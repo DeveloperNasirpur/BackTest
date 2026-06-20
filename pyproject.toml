@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "backtest"
+version = "1.0.0"
+description = "Backtest engine with Trex indicator integration"
+requires-python = ">=3.12"
+dependencies = [
+    "trex-engine",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["backtest"]
