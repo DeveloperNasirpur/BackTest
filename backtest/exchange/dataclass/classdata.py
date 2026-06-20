@@ -845,12 +845,12 @@ class BaseUserParameter( OrderEvent):
 
     def _deprecate_event(self):
         for _id in self._ids_deprecate_order:
-            self.history_orders[_id] = self._online_orders.pop(_id)
+            self._history_order[_id] = self._online_orders.pop(_id)
         self._ids_deprecate_order.clear()
 
         for _id in self._ids_deprecate_position:
             if _id in self._online_position.keys():
-                self.history_positions[_id] = self._online_position.pop(_id)
+                self._history_position[_id] = self._online_position.pop(_id)
         self._ids_deprecate_position.clear()
 
     @abstractmethod
