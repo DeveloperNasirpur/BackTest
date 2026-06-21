@@ -124,6 +124,8 @@ class Backtest:
 
         # ── 1. Init trex ──────────────────────────────────────────────────
         import trex as _trex
+        if _trex.ctx.initialized:
+            _trex.ctx.reset()
         _trex.init(port=s.port, source_timeframe=s.timeframe)
 
         # ── 2. Register indicators ────────────────────────────────────────

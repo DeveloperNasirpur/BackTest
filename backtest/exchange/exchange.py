@@ -332,9 +332,9 @@ class Exchange(Api):
         candle_list = list(candles)
         total = len(candle_list)
         for i, bar in enumerate(candle_list):
+            self.kline(bar)
             if on_bar:
                 on_bar(bar)
-            self.kline(bar)
             if progress and total >= 10_000 and (i + 1) % 10_000 == 0:
                 pct = (i + 1) / total * 100
                 print(f"[backtest] {i+1:,}/{total:,} bars ({pct:.1f}%)")
