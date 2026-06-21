@@ -26,6 +26,8 @@ Quick start::
                 self.sell(usdt=100)
 
     candles = load_csv("data/BTCUSDT_1m.csv", symbol="BTCUSDT")
+    # or from PostgreSQL:
+    # candles = load_postgres("BTCUSDT", "1m", host="localhost", database="okx")
     result  = Backtest(MyStrategy).run(candles)
     print(result)
 """
@@ -36,6 +38,7 @@ from backtest.exchange.dataclass.classdata import StrategyBase
 from backtest.exchange.dataclass.enums import Side, OrderType, PositionState
 from backtest.utils.loader import StrategyLoader
 from backtest.utils.candle_loader import load_csv, load_dicts, load_lists
+from backtest.utils.postgres_loader import load_postgres
 from backtest.utils.demo import demo_candles
 from backtest.stats import BacktestResult
 
@@ -50,6 +53,7 @@ __all__ = [
     "load_csv",
     "load_dicts",
     "load_lists",
+    "load_postgres",
     # ── results ───────────────────────────────────────────────────────────
     "BacktestResult",
     # ── low-level (advanced use) ──────────────────────────────────────────
