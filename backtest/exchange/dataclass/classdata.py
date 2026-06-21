@@ -742,7 +742,7 @@ class BaseUserParameter( OrderEvent):
         order.leverage = self.leverage(order.symbol)  # safe: auto-defaults to 10 if unset
 
         if order.order_type.value.__eq__(OrderType.MARKET.value):
-            order.entry = self.ohlcv.close
+            order.entry = self.ohlcv.close if self.ohlcv else None
             # self.order_triggered(order, self.ohlcv)
             res:bool = self._add_position_market(order)
             self.user_event.order_placed(order)
@@ -885,9 +885,9 @@ class BaseUserParameter( OrderEvent):
         self.user_event.order_cancelled(order)
         self._ids_deprecate_order.append(order.id)
 
-    def close_position(self, pos_id: int) -> None:
+    def close_position(self, pos_id: int) -> bool:
         if not self.valid_position_id(pos_id):
-            return None
+            return False
         pos: PositionIsolate = self._online_position[pos_id]
         # Compute final PnL at the current bar's close price
         if pos.side == Side.LONG:
@@ -900,7 +900,7 @@ class BaseUserParameter( OrderEvent):
         # Route through IsolateUser/CrossUser.position_closed which handles:
         # _return_margin_to_balance, user_event.position_closed, _ids_deprecate_position
         self.position_closed(pos)
-        return None
+        return True
 
 
 

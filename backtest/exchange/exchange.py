@@ -197,7 +197,7 @@ class Exchange(Api):
         order.entry = entry
         order.stop_price = stop_price
         order.take_profit = take_profit
-        order.placed_time = self.ohlcv.time
+        order.placed_time = self.ohlcv.time if self.ohlcv else None
         res,msg = self._users[user_id].add_order( order)
         logger.info(msg)
 
