@@ -38,6 +38,88 @@ def _ohlcv_to_bar(ohlcv: OHLCV):
     )
 
 
+def _fmt_time(dt) -> str | None:
+    return dt.strftime("%Y-%m-%d %H:%M") if dt is not None else None
+
+
+def _build_bt_state(s, bar) -> dict:
+    """Serialize live exchange state for the TrexTerminal bottom panel."""
+    exchange = s._exchange
+    user_id  = s._user_id
+    if exchange is None or user_id is None:
+        return {"type": "bt_state"}
+
+    positions = exchange.get_positions(symbol=s.symbol, user_id=user_id)
+    orders    = exchange.get_orders(user_id, s.symbol)
+    balance   = exchange.get_balance(user_id)
+    history   = exchange.get_history_positions(symbol=s.symbol, user_id=user_id, limit=200)
+
+    mark = bar.close
+
+    def _pos(p):
+        pnl_pct = round(p.pnl * p.leverage * 100, 2) if p.pnl else 0.0
+        return {
+            "id":          p.id,
+            "symbol":      p.symbol,
+            "side":        p.side.value,
+            "entry":       p.entry,
+            "mark":        mark,
+            "margin":      p.margin,
+            "leverage":    p.leverage,
+            "pnl":         round(p.pnl, 6) if p.pnl else 0.0,
+            "pnl_usdt":    round(p.pnl_usdt, 4) if p.pnl_usdt else 0.0,
+            "pnl_pct":     pnl_pct,
+            "stop_price":  p.stop_price,
+            "take_profit": p.take_profit,
+            "liquidy":     getattr(p, "liquidy", None),
+            "open_time":   _fmt_time(p.open_time),
+            "bars":        p.bars,
+        }
+
+    def _order(o):
+        return {
+            "id":          o.id,
+            "symbol":      o.symbol,
+            "side":        o.side.value,
+            "type":        o.order_type.value,
+            "entry":       o.entry,
+            "usdt":        o.usdt,
+            "stop_price":  o.stop_price,
+            "take_profit": o.take_profit,
+            "placed_time": _fmt_time(o.placed_time),
+        }
+
+    def _hist(p):
+        pnl_pct = round(p.pnl * p.leverage * 100, 2) if p.pnl else 0.0
+        return {
+            "id":          p.id,
+            "symbol":      p.symbol,
+            "side":        p.side.value,
+            "entry":       p.entry,
+            "margin":      p.margin,
+            "leverage":    p.leverage,
+            "pnl_usdt":    round(p.pnl_usdt, 4) if p.pnl_usdt else 0.0,
+            "pnl_pct":     pnl_pct,
+            "state":       p.state.value,
+            "open_time":   _fmt_time(p.open_time),
+            "close_time":  _fmt_time(p.close_time),
+        }
+
+    margin_used = sum(p.margin for p in positions)
+    unrealized  = sum(p.pnl_usdt for p in positions)
+
+    return {
+        "type":             "bt_state",
+        "balance":          round(balance, 4),
+        "margin_used":      round(margin_used, 4),
+        "unrealized_pnl":   round(unrealized, 4),
+        "equity":           round(balance + margin_used + unrealized, 4),
+        "positions":        [_pos(p)    for p in positions],
+        "orders":           [_order(o)  for o in orders],
+        "trade_history":    [_hist(p)   for p in history],
+    }
+
+
 class Backtest:
     """
     Run a strategy against historical candles.
@@ -177,7 +259,14 @@ class Backtest:
             # c) strategy logic: places new orders (market → current close, limit → next bar)
             s.on_kline(bar)
 
-            # d) playback delay — honors pause/speed from TrexTerminal
+            # d) broadcast live state to TrexTerminal bottom panel
+            if s.broadcast:
+                try:
+                    _trex.broadcast_raw(_build_bt_state(s, bar))
+                except Exception:
+                    pass
+
+            # e) playback delay — honors pause/speed from TrexTerminal
             if ctrl is not None:
                 ctrl.wait(_tf_to_seconds(s.timeframe))
 

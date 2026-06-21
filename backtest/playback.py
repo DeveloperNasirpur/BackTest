@@ -1,8 +1,5 @@
 """
 backtest.playback — thread-safe playback controller for backtest replay.
-
-BackTest creates one instance per run() call and registers it with trex
-so TrexTerminal clients can control playback speed and pause/resume.
 """
 from __future__ import annotations
 
@@ -21,18 +18,18 @@ class PlaybackController:
     Parameters
     ----------
     speed:
-        Initial speed multiplier.  ``1.0`` = one real second per timeframe
-        second (e.g. 1-minute candles play at 1 candle/second).
-        ``0`` or negative = maximum speed (no delay between bars).
+        Initial speed multiplier.  ``1.0`` = 1 bar per real second.
+        ``0`` = maximum speed (no delay).
     """
 
     def __init__(self, speed: float = 1.0) -> None:
         self._resume   = threading.Event()
-        self._resume.set()          # start in play state
+        self._resume.set()                      # start in play state
+        self._lock     = threading.Lock()       # guards _speed
         self._speed    = max(0.0, float(speed))
         self._stopped  = False
 
-    # ── Called by the backtest loop ───────────────────────────────────────────
+    # ── Called by the backtest loop (main thread) ─────────────────────────────
 
     def wait(self, tf_seconds: int) -> None:
         """
@@ -48,23 +45,30 @@ class PlaybackController:
         self._resume.wait()
         if self._stopped:
             return
-        # No delay at max speed
-        if self._speed <= 0:
+        # Read speed atomically
+        with self._lock:
+            speed = self._speed
+        if speed <= 0:
             return
-        delay = tf_seconds / self._speed
-        # Sleep in 50ms chunks so pause/stop are responsive
+        delay = tf_seconds / speed
+        # Sleep in 50 ms chunks — stays responsive to pause/stop/speed changes
         deadline = time.monotonic() + delay
         while time.monotonic() < deadline:
             if not self._resume.is_set():
-                self._resume.wait()   # paused mid-sleep → block
+                self._resume.wait()             # paused mid-sleep → block
             if self._stopped:
+                return
+            # Re-read speed in case it changed mid-sleep
+            with self._lock:
+                speed = self._speed
+            if speed <= 0:
                 return
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
             time.sleep(min(0.05, remaining))
 
-    # ── Called from the trex server thread (async context) ───────────────────
+    # ── Called from the trex server thread ───────────────────────────────────
 
     def pause(self) -> None:
         """Pause replay — wait() will block until resume()."""
@@ -75,21 +79,16 @@ class PlaybackController:
         self._resume.set()
 
     def set_speed(self, speed: float) -> None:
-        """
-        Set replay speed multiplier.
-
-        ``1.0``  = 1 candle per timeframe-second (1-min chart → 1 bar/sec)
-        ``60.0`` = 60× real-time  (1-min chart → 1 bar/minute wall-clock)
-        ``0``    = maximum speed
-        """
-        self._speed = max(0.0, float(speed))
+        """Set replay speed multiplier. Thread-safe."""
+        with self._lock:
+            self._speed = max(0.0, float(speed))
 
     def stop(self) -> None:
         """Signal the loop to stop (called when backtest ends)."""
         self._stopped = True
-        self._resume.set()          # unblock any blocking wait()
+        self._resume.set()                      # unblock any blocking wait()
 
-    # ── Read-only state (for broadcasting to clients) ─────────────────────────
+    # ── Read-only state ───────────────────────────────────────────────────────
 
     @property
     def paused(self) -> bool:
@@ -97,7 +96,8 @@ class PlaybackController:
 
     @property
     def speed(self) -> float:
-        return self._speed
+        with self._lock:
+            return self._speed
 
 
 __all__ = ["PlaybackController"]
