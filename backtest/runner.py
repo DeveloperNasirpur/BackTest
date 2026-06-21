@@ -257,6 +257,11 @@ class Backtest:
         if s.broadcast:
             ctrl = PlaybackController(speed=s.replay_speed)
             _trex.set_playback_controller(ctrl)
+            # Clear any drawings from a previous backtest run
+            try:
+                _trex.broadcast_raw({"type": "drawings_clear"})
+            except Exception:
+                pass
 
         # ── 2. Register indicators ────────────────────────────────────────
         s.indicators()
