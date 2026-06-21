@@ -109,8 +109,8 @@ def _build_bt_state(s, bar) -> dict:
             "close_time":  _fmt_time(p.close_time),
         }
 
-    margin_used = sum(p.margin for p in positions)
-    unrealized  = sum(p.pnl_usdt for p in positions)
+    margin_used = sum(p.margin or 0 for p in positions)
+    unrealized  = sum(p.pnl_usdt or 0 for p in positions)
 
     return {
         "type":             "bt_state",
@@ -129,7 +129,7 @@ def _build_bt_result(result: BacktestResult) -> dict:
     equity = result.initial_balance
     equity_curve: list[float] = []
     for pos in result.positions:
-        equity += pos.pnl_usdt
+        equity += pos.pnl_usdt or 0
         equity_curve.append(round(equity, 2))
 
     pf = result.profit_factor
