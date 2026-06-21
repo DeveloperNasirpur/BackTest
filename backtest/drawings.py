@@ -7,7 +7,6 @@ connected TrexTerminal chart — no extra code needed from the user.
 """
 from __future__ import annotations
 
-import uuid
 from datetime import datetime, timezone
 from typing import Union
 
@@ -31,12 +30,6 @@ def _ts(dt: datetime | None) -> int:
     return int(dt.timestamp())
 
 
-def _pct(numerator: float, denominator: float) -> float:
-    if denominator == 0:
-        return 0.0
-    return abs(numerator / denominator) * 100
-
-
 # ── position drawings ─────────────────────────────────────────────────────────
 
 def position_open_drawing(
@@ -56,9 +49,6 @@ def position_open_drawing(
 
     sl = pos.stop_price   or (pos.entry * (0.98 if long else 1.02))
     tp = pos.take_profit  or (pos.entry * (1.04 if long else 0.96))
-
-    risk   = _pct(abs(pos.entry - sl), pos.entry)
-    reward = _pct(abs(pos.entry - tp), pos.entry)
 
     return {
         "id":        f"pos_{pos.id}",
@@ -105,7 +95,9 @@ def position_close_drawing(
     The right edge is moved to close_time; colour darkens on loss.
     """
     long      = pos.side == Side.LONG
-    profit    = pos.pnl_usdt >= 0
+    pnl_usdt  = pos.pnl_usdt or 0.0
+    pnl_pct   = pos.pnl or 0.0
+    profit    = pnl_usdt >= 0
     color     = (_LONG_COLOR if long else _SHORT_COLOR) if profit else "#9e9e9e"
     t0        = _ts(pos.open_time)
     t1        = _ts(pos.close_time) if pos.close_time else t0 + bar_interval_sec
@@ -113,18 +105,15 @@ def position_close_drawing(
     # exit price back-calculated from pos.pnl which is (price-entry)/entry for long
     # and (entry-price)/entry for short — so no leverage factor here
     if long:
-        exit_p = pos.entry * (1 + pos.pnl)
+        exit_p = pos.entry * (1 + pnl_pct)
     else:
-        exit_p = pos.entry * (1 - pos.pnl)
+        exit_p = pos.entry * (1 - pnl_pct)
 
     sl = pos.stop_price  or (pos.entry * (0.98 if long else 1.02))
     tp = pos.take_profit or (pos.entry * (1.04 if long else 0.96))
 
-    risk   = _pct(abs(pos.entry - sl), pos.entry)
-    reward = _pct(abs(pos.entry - tp), pos.entry)
-
     pnl_sign = "+" if profit else ""
-    label    = f"{pnl_sign}{pos.pnl_usdt:.2f} USDT"
+    label    = f"{pnl_sign}{pnl_usdt:.2f} USDT"
 
     return {
         "id":        f"pos_{pos.id}",
