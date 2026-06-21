@@ -14,20 +14,20 @@ def _valid_order(side:Side, entry:float, stop:float = None, target:float =None)-
     msg_error_order:str = ""
     res:bool = True
     if Side.SHORT.value.__eq__(side.value):
-        if stop:
+        if stop and entry is not None:
             if stop < entry:
                 msg_error_order+="Stop is lowing than entry."
                 res = False
-        if target:
+        if target and entry is not None:
             if target > entry:
                 msg_error_order+="Target is higher than entry."
                 res = False
         return res, msg_error_order
-    if stop:
+    if stop and entry is not None:
         if stop > entry:
             msg_error_order+="Stop is higher than entry."
             res = False
-    if target:
+    if target and entry is not None:
         if target < entry:
             msg_error_order+="Target is lower than entry."
             res = False
@@ -185,7 +185,7 @@ class Exchange(Api):
         self.valid_user(user_id)
         res, msg = _valid_order(side, entry, stop_price, take_profit)
         if not res:
-            return False, msg
+            return False, 0
 
         _id:int = uuid.uuid4().int
         order:Order = Order(self._users[user_id])

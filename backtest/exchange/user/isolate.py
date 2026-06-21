@@ -44,6 +44,7 @@ class IsolateUser(BaseUserParameter, PositionIsolateEvent):
     #====================Event Position =============================
     def position_liquidated(self, pos: 'PositionIsolate'):
         pos.close_time = self.ohlcv.time if self.ohlcv else None
+        pos.pnl_usdt = -pos.margin
         # On liquidation the entire margin is lost
         self._frees_balance -= pos.margin
         self.user_event.position_liquidated(pos)

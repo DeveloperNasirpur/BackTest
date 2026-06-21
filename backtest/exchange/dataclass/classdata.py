@@ -416,11 +416,15 @@ class ComputePosition:
 
     def _pnl_short(self, price:float):
         self.position.pnl = round((self.position.entry - price) / self.position.entry, 4)
-        self.position.pnl_usdt = (self.position.pnl * self.position.leverage) * self.position.margin
+        gross = (self.position.pnl * self.position.leverage) * self.position.margin
+        fee = getattr(self.position.event_callback, '_taker_fee', 0.0)
+        self.position.pnl_usdt = gross - 2.0 * fee * self.position.margin * self.position.leverage
 
     def _pnl_long(self, price:float):
         self.position.pnl = round((price - self.position.entry) / self.position.entry, 4)
-        self.position.pnl_usdt = (self.position.pnl * self.position.leverage) * self.position.margin
+        gross = (self.position.pnl * self.position.leverage) * self.position.margin
+        fee = getattr(self.position.event_callback, '_taker_fee', 0.0)
+        self.position.pnl_usdt = gross - 2.0 * fee * self.position.margin * self.position.leverage
 
     def _update_pnl_short(self, ohlcv: OHLCV) :
         self._pnl_short(ohlcv.close)
@@ -752,6 +756,8 @@ class BaseUserParameter( OrderEvent):
             return False, "Invalid Order ID"
         order:Order = self._online_orders.pop(order_id)
         self._return_margin_to_balance(order.usdt)
+        self._history_order[order_id] = order
+        self.user_event.order_cancelled(order)
         return True, "Order is canceled"
 
     def modify_order(self, order_id:int,side: Side = None,order_type: OrderType = None,

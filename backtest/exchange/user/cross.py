@@ -13,6 +13,7 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
         super().__init__(user_id, wallet, user_event)
         self._cross_pnl:float = 0
         self._frees_pnl_online_positions: float = 0.0
+        self._pos_pnl_cache: dict[int, float] = {}
 
     def on_position_long(self, symbol: str, _id: int):
         self.user_event.on_position_long(symbol, _id)
@@ -63,15 +64,18 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
         self._ids_deprecate_position.append(pos.id)
 
     def position_higher_loss_pnl(self, _id: int, usdt_pnl: float):
-        self._frees_pnl_online_positions += usdt_pnl
+        self._pos_pnl_cache[_id] = usdt_pnl
 
     def compute_pnl(self):
-        all_balance:float = self._balance + self._frees_balance + self._frees_pnl_online_positions
+        # Only include PnL of positions still online; closed ones already returned to balance
+        live_pnl = sum(self._pos_pnl_cache.get(_id, 0.0) for _id in self._online_position)
+        self._frees_pnl_online_positions = live_pnl
+        all_balance:float = self._balance + self._frees_balance + live_pnl
         if all_balance <= 0 :
             self.user_event.liquid_balance()
             self._balance = 0
 
-        self._frees_pnl_online_positions = 0
+        self._pos_pnl_cache.clear()
 
     def kline(self, ohlcv: OHLCV):
         super().kline(ohlcv)
