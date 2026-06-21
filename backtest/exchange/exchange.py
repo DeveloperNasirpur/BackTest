@@ -144,18 +144,18 @@ class Exchange(Api):
             for p in pos:
                 if end_time >= p.open_time.timestamp() >= start_time:
                     res.append(p)
-            return res
+            return res[-limit:] if limit else res
         if start_time:
             for p in pos:
                 if p.open_time.timestamp() >= start_time:
                     res.append(p)
-            return res
+            return res[-limit:] if limit else res
         if end_time:
             for p in pos:
                 if end_time >= p.open_time.timestamp():
                     res.append(p)
-            return res
-        return pos
+            return res[-limit:] if limit else res
+        return pos[-limit:] if limit else pos
 
     def get_leverage_info(self, user_id: str, symbol: str) -> int:
         self.valid_user(user_id)

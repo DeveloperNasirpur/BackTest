@@ -91,7 +91,7 @@ class BacktestResult:
             peak   = equity
 
             for pos in all_pos:
-                pnl = pos.pnl_usdt
+                pnl = pos.pnl_usdt or 0.0
                 result.total_pnl_usdt += pnl
                 result.total_trades   += 1
 
