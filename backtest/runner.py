@@ -95,8 +95,8 @@ class Backtest:
         Per-bar execution order
         -----------------------
         1. trex.push(bar)       → indicators recomputed, listeners called
-        2. strategy.on_kline()  → user logic runs, orders are placed
-        3. exchange.kline()     → limit orders checked, positions updated
+        2. exchange.kline(bar)  → limit orders checked, positions updated
+        3. strategy.on_kline()  → user logic runs, orders are placed
 
         This means market orders placed in on_kline() execute at the
         *current* bar's close price (realistic for EOB strategies).

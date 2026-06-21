@@ -631,6 +631,8 @@ class BaseUserParameter( OrderEvent):
         self._user_id: str = user_id
         self.user_event: HostEventUser = user_event
         self._leverage: dict[str, int] = {}
+        self._taker_fee: float = 0.0
+        self._slippage:  float = 0.0
 
         self.ohlcv: OHLCV | None = None
 
