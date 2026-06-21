@@ -66,8 +66,9 @@ class Strategy(HostEventUser, ABC):
     leverage: int  = 10
     fee: float     = 0.0004
     slippage: float = 0.0001
-    broadcast: bool = True
-    port: int      = 8765
+    broadcast: bool     = True
+    port: int           = 8765
+    replay_speed: float = 1.0   # 1.0=1 bar/sec, 60=1 bar/min-tf per sec, 0=max
 
     # ── internal, wired by Backtest ───────────────────────────────────────
     _exchange: Exchange | None = None

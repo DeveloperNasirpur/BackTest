@@ -9,6 +9,7 @@ import time
 from typing import Iterable
 
 from backtest.exchange.exchange import Exchange
+from backtest.playback import PlaybackController
 from backtest.stats import BacktestResult
 from backtest.strategy import Strategy
 from trex.base.ohlcv import OHLCV
@@ -128,6 +129,12 @@ class Backtest:
             _trex.ctx.reset()
         _trex.init(port=s.port, source_timeframe=s.timeframe)
 
+        # ── 1b. Playback controller (only when broadcasting) ──────────────
+        ctrl: PlaybackController | None = None
+        if s.broadcast:
+            ctrl = PlaybackController(speed=s.replay_speed)
+            _trex.set_playback_controller(ctrl)
+
         # ── 2. Register indicators ────────────────────────────────────────
         s.indicators()
 
@@ -170,6 +177,10 @@ class Backtest:
             # c) strategy logic: places new orders (market → current close, limit → next bar)
             s.on_kline(bar)
 
+            # d) playback delay — honors pause/speed from TrexTerminal
+            if ctrl is not None:
+                ctrl.wait(_tf_to_seconds(s.timeframe))
+
             if progress and total >= 10_000 and (i + 1) % 10_000 == 0:
                 pct = (i + 1) / total * 100
                 elapsed = time.perf_counter() - t0
@@ -184,5 +195,10 @@ class Backtest:
         if progress:
             print(f"[backtest] Done — {total:,} bars in {elapsed:.1f}s")
 
-        # ── 5. Collect results ────────────────────────────────────────────
+        # ── 5. Stop playback controller and notify clients ────────────────
+        if ctrl is not None:
+            ctrl.stop()
+            _trex.set_playback_controller(None)
+
+        # ── 6. Collect results ────────────────────────────────────────────
         return BacktestResult.from_exchange(exchange)
