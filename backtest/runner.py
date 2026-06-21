@@ -14,6 +14,10 @@ from backtest.stats import BacktestResult
 from backtest.strategy import Strategy
 from trex.base.ohlcv import OHLCV
 
+# Max real-time interval between bt_state/bt_progress broadcasts (seconds).
+# At max speed (speed=0) this caps broadcasts at ~10 fps to avoid flooding.
+_BROADCAST_INTERVAL = 0.1
+
 
 _TF_SECONDS: dict[str, int] = {
     "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
@@ -120,6 +124,42 @@ def _build_bt_state(s, bar) -> dict:
     }
 
 
+def _build_bt_result(result: BacktestResult) -> dict:
+    """Serialize BacktestResult for the TrexTerminal Results tab."""
+    equity = result.initial_balance
+    equity_curve: list[float] = []
+    for pos in result.positions:
+        equity += pos.pnl_usdt
+        equity_curve.append(round(equity, 2))
+
+    pf = result.profit_factor
+    if pf == float("inf"):
+        pf = 9999.0
+
+    return {
+        "type":             "bt_result",
+        "initial_balance":  round(result.initial_balance, 2),
+        "final_balance":    round(result.final_balance, 2),
+        "return_pct":       round(result.return_pct, 2),
+        "total_trades":     result.total_trades,
+        "winning_trades":   result.winning_trades,
+        "losing_trades":    result.losing_trades,
+        "win_rate":         round(result.win_rate * 100, 1),
+        "profit_factor":    round(pf, 2),
+        "risk_reward":      round(result.risk_reward, 2),
+        "total_pnl_usdt":   round(result.total_pnl_usdt, 2),
+        "gross_profit":     round(result.gross_profit, 2),
+        "gross_loss":       round(result.gross_loss, 2),
+        "largest_win":      round(result.largest_win, 2),
+        "largest_loss":     round(result.largest_loss, 2),
+        "avg_win":          round(result.avg_win, 2),
+        "avg_loss":         round(result.avg_loss, 2),
+        "max_drawdown_usdt":round(result.max_drawdown_usdt, 2),
+        "max_drawdown_pct": round(result.max_drawdown_pct, 2),
+        "equity_curve":     equity_curve,
+    }
+
+
 class Backtest:
     """
     Run a strategy against historical candles.
@@ -204,6 +244,7 @@ class Backtest:
             raise ValueError("Candle list is empty.")
 
         t0 = time.perf_counter()
+        _last_broadcast = 0.0          # monotonic clock of last bt_state broadcast
 
         # ── 1. Init trex ──────────────────────────────────────────────────
         import trex as _trex
@@ -259,12 +300,21 @@ class Backtest:
             # c) strategy logic: places new orders (market → current close, limit → next bar)
             s.on_kline(bar)
 
-            # d) broadcast live state to TrexTerminal bottom panel
+            # d) broadcast live state + progress to TrexTerminal (throttled)
             if s.broadcast:
-                try:
-                    _trex.broadcast_raw(_build_bt_state(s, bar))
-                except Exception:
-                    pass
+                now = time.monotonic()
+                if now - _last_broadcast >= _BROADCAST_INTERVAL:
+                    _last_broadcast = now
+                    try:
+                        _trex.broadcast_raw({
+                            "type":    "bt_progress",
+                            "current": i + 1,
+                            "total":   total,
+                            "pct":     round((i + 1) / total * 100, 1),
+                        })
+                        _trex.broadcast_raw(_build_bt_state(s, bar))
+                    except Exception:
+                        pass
 
             # e) playback delay — honors pause/speed from TrexTerminal
             if ctrl is not None:
@@ -290,4 +340,17 @@ class Backtest:
             _trex.set_playback_controller(None)
 
         # ── 6. Collect results ────────────────────────────────────────────
-        return BacktestResult.from_exchange(exchange)
+        result = BacktestResult.from_exchange(exchange)
+
+        # ── 7. Broadcast final state + results to TrexTerminal ───────────
+        if s.broadcast:
+            try:
+                _trex.broadcast_raw({
+                    "type": "bt_progress", "current": total, "total": total, "pct": 100.0,
+                })
+                _trex.broadcast_raw(_build_bt_state(s, candles[-1]))
+                _trex.broadcast_raw(_build_bt_result(result))
+            except Exception:
+                pass
+
+        return result
