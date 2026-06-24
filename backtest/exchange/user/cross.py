@@ -13,6 +13,7 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
         super().__init__(user_id, wallet, user_event)
         self._cross_pnl:float = 0
         self._frees_pnl_online_positions: float = 0.0
+        self._pos_pnl_cache: dict[int, float] = {}
 
     def on_position_long(self, symbol: str, _id: int):
         self.user_event.on_position_long(symbol, _id)
@@ -27,10 +28,15 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
         self.user_event.waiting_entry_long(symbol, _id)
 
     def _add_position_market(self, order: Order) -> bool:
-        order.entry = self.ohlcv.close
-        self._online_position[order.id] = PositionCross(order, self.ohlcv.time, self)
-        self.user_event.position_opened(self.online_positions[order.id])
-
+        from backtest.exchange.dataclass.enums import Side
+        slip = getattr(self, '_slippage', 0.0)
+        if order.side == Side.LONG:
+            order.entry = self.ohlcv.close * (1 + slip)
+        else:
+            order.entry = self.ohlcv.close * (1 - slip)
+        pos = PositionCross(order, self.ohlcv.time, self)
+        self._online_position[order.id] = pos
+        self.user_event.position_opened(pos)
         return True
 
     def order_triggered(self, order: Order, ohlcv: OHLCV):
@@ -47,27 +53,29 @@ class CrossUser( PositionCrossEvent, BaseUserParameter):
 
     def position_triggered(self, pos: PositionCross):
         pos.close_time = self.ohlcv.time
+        self._return_margin_to_balance(pos.margin, pos.pnl_usdt)
         self.user_event.position_triggered(pos)
-        self._return_margin_to_balance(pos.margin , pos.pnl_usdt)
-
         self._ids_deprecate_position.append(pos.id)
 
     def position_stopped(self, pos: PositionCross):
         pos.close_time = self.ohlcv.time
+        self._return_margin_to_balance(pos.margin, pos.pnl_usdt)
         self.user_event.position_stopped(pos)
-        self._return_margin_to_balance(pos.margin , pos.pnl_usdt)
         self._ids_deprecate_position.append(pos.id)
 
     def position_higher_loss_pnl(self, _id: int, usdt_pnl: float):
-        self._frees_pnl_online_positions += usdt_pnl
+        self._pos_pnl_cache[_id] = usdt_pnl
 
     def compute_pnl(self):
-        all_balance:float = self._balance + self._frees_balance + self._frees_pnl_online_positions
+        # Only include PnL of positions still online; closed ones already returned to balance
+        live_pnl = sum(self._pos_pnl_cache.get(_id, 0.0) for _id in self._online_position)
+        self._frees_pnl_online_positions = live_pnl
+        all_balance:float = self._balance + self._frees_balance + live_pnl
         if all_balance <= 0 :
             self.user_event.liquid_balance()
             self._balance = 0
 
-        self._frees_pnl_online_positions = 0
+        self._pos_pnl_cache.clear()
 
     def kline(self, ohlcv: OHLCV):
         super().kline(ohlcv)

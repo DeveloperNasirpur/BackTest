@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Union
+from typing import Union, Callable, Iterable
 from backtest.exchange.dataclass.classdata import PositionIsolate, Order, PositionCross
 from backtest.exchange.dataclass.enums import Side, OrderType
 from backtest.exchange.dataclass.classdata import HostEventUser, Api
@@ -14,20 +14,20 @@ def _valid_order(side:Side, entry:float, stop:float = None, target:float =None)-
     msg_error_order:str = ""
     res:bool = True
     if Side.SHORT.value.__eq__(side.value):
-        if stop:
+        if stop and entry is not None:
             if stop < entry:
                 msg_error_order+="Stop is lowing than entry."
                 res = False
-        if target:
+        if target and entry is not None:
             if target > entry:
                 msg_error_order+="Target is higher than entry."
                 res = False
         return res, msg_error_order
-    if stop:
+    if stop and entry is not None:
         if stop > entry:
             msg_error_order+="Stop is higher than entry."
             res = False
-    if target:
+    if target and entry is not None:
         if target < entry:
             msg_error_order+="Target is lower than entry."
             res = False
@@ -35,11 +35,19 @@ def _valid_order(side:Side, entry:float, stop:float = None, target:float =None)-
 
 
 class Exchange(Api):
-    def __init__(self, symbols:list[str]):
+    def __init__(
+        self,
+        symbols: list[str],
+        taker_fee: float = 0.0004,   # 0.04% per trade (Binance default)
+        slippage: float = 0.0001,    # 0.01% price slippage on market orders
+    ):
         super().__init__()
-        self.symbols:list[str] = symbols
-        self.ohlcv:OHLCV|None = None
-        self._users:dict[str, Union[IsolateUser, CrossUser]]= {}
+        self.symbols: list[str] = symbols
+        self.ohlcv: OHLCV | None = None
+        self._users: dict[str, Union[IsolateUser, CrossUser]] = {}
+        self.taker_fee: float = taker_fee
+        self.slippage: float = slippage
+        self._initial_deposits: dict[str, float] = {}
 
     def change_to_isolated(self, symbol: str, user_id: str, event_host:HostEventUser) -> tuple[bool,str]:
         self.valid_user(user_id)
@@ -86,7 +94,7 @@ class Exchange(Api):
 
     def valid_user(self, user_id: str) -> bool:
         if  user_id not in self._users.keys():
-            raise f"{user_id} is not singUp"
+            raise RuntimeError(f"{user_id} is not singUp")
         return True
 
         # ==================================================================================
@@ -96,12 +104,18 @@ class Exchange(Api):
 
     def sing_up(self, user_event: HostEventUser) -> str:
         user_id: str = str(int(uuid.uuid4().int % 10 ** 18))
-        self._users[user_id] = IsolateUser(user_id=user_id, wallet=0, user_event=user_event)
+        user = IsolateUser(user_id=user_id, wallet=0, user_event=user_event)
+        user._taker_fee = self.taker_fee
+        user._slippage = self.slippage
+        self._users[user_id] = user
         return user_id
 
     def deposit(self, user_id: str, usdt: float) -> bool:
         self.valid_user(user_id)
         self._users[user_id].deposit(usdt)
+        self._initial_deposits[user_id] = (
+            self._initial_deposits.get(user_id, 0.0) + usdt
+        )
         return True
 
     def get_balance(self, user_id: str) -> float:
@@ -109,35 +123,39 @@ class Exchange(Api):
         return self._users[user_id].balance()
 
     def get_positions(self, symbol: str = None, user_id: str = "", side: str = None) \
-            -> list[Union[PositionIsolate,PositionCross]]:
+            -> list[Union[PositionIsolate, PositionCross]]:
         self.valid_user(user_id)
-        if symbol in self._users[user_id].online_positions.keys():
-            return self._users[user_id].online_positions[symbol] if symbol else []
-        return []
+        positions = list(self._users[user_id].online_positions.values())
+        if symbol:
+            positions = [p for p in positions if p.symbol == symbol]
+        if side:
+            positions = [p for p in positions if p.side.value == side]
+        return positions
 
 
     def get_history_positions(self, symbol: str = None, user_id: str = None, start_time: int = None,
                               end_time: int = None, limit: int = 20) -> list:
         self.valid_user(user_id)
+        all_pos = list(self._users[user_id].history_positions.values())
         pos: list[Union[PositionIsolate, PositionCross]] = \
-            self._users[user_id].history_positions[symbol] if symbol else []
+            [p for p in all_pos if p.symbol == symbol] if symbol else all_pos
         res: list[Union[PositionIsolate, PositionCross]] = []
         if start_time and end_time:
             for p in pos:
                 if end_time >= p.open_time.timestamp() >= start_time:
                     res.append(p)
-            return res
+            return res[-limit:] if limit else res
         if start_time:
             for p in pos:
                 if p.open_time.timestamp() >= start_time:
                     res.append(p)
-            return res
+            return res[-limit:] if limit else res
         if end_time:
             for p in pos:
                 if end_time >= p.open_time.timestamp():
                     res.append(p)
-            return res
-        return pos
+            return res[-limit:] if limit else res
+        return pos[-limit:] if limit else pos
 
     def get_leverage_info(self, user_id: str, symbol: str) -> int:
         self.valid_user(user_id)
@@ -166,10 +184,8 @@ class Exchange(Api):
                     ) -> tuple[bool, int]:
         self.valid_user(user_id)
         res, msg = _valid_order(side, entry, stop_price, take_profit)
-        a =1
         if not res:
-
-            raise f"Order {side.value} {msg}"
+            return False, 0
 
         _id:int = uuid.uuid4().int
         order:Order = Order(self._users[user_id])
@@ -181,7 +197,7 @@ class Exchange(Api):
         order.entry = entry
         order.stop_price = stop_price
         order.take_profit = take_profit
-        order.placed_time = self.ohlcv.time
+        order.placed_time = self.ohlcv.time if self.ohlcv else None
         res,msg = self._users[user_id].add_order( order)
         logger.info(msg)
 
@@ -221,8 +237,9 @@ class Exchange(Api):
         order.order_type = OrderType.MARKET if not entry else OrderType.LIMIT
         order.stop_price = stop_price
         order.take_profit = take_profit
-        order.usdt = usdt if usdt else None
-        order.price = entry
+        order.usdt = usdt if usdt else 0.0
+        order.entry = entry
+        order.placed_time = self.ohlcv.time if self.ohlcv else None
         return order
 
     def open_long(self,
@@ -239,8 +256,8 @@ class Exchange(Api):
            order
         )
         if res:
-            return 0, msg
-        return order.id, msg
+            return order.id, msg
+        return 0, msg
 
     def close_position(
             self,
@@ -262,15 +279,14 @@ class Exchange(Api):
             take_profit: float = None) -> tuple[int, str]:
         self.valid_user(user_id)
         order: Order = self._create_order(
-            symbol, user_id,  usdt, entry, stop_price, take_profit)
+            symbol, user_id, usdt, entry, stop_price, take_profit)
         order.side = Side.SHORT
-        a= 1
         res, msg = self._users[user_id].add_order(
             order
         )
         if res:
-            return 0, msg
-        return order.id, msg
+            return order.id, msg
+        return 0, msg
 
     def set_target(
             self,
@@ -297,7 +313,39 @@ class Exchange(Api):
         self.valid_user(user_id)
         return self._users[user_id].get_orders(symbol)
 
+    def run(
+        self,
+        candles: Iterable[OHLCV],
+        on_bar: Callable[[OHLCV], None] | None = None,
+        progress: bool = True,
+    ) -> "BacktestResult":
+        """
+        Feed all candles through the exchange and return statistics.
+
+        Args:
+            candles:  Iterable of OHLCV bars (list, generator, CSV loader…)
+            on_bar:   Optional callback called with each bar BEFORE orders/positions
+                      are processed — use it to run indicator logic and place orders.
+            progress: Print a progress line every 10,000 bars.
+        """
+        from backtest.stats import BacktestResult
+        candle_list = list(candles)
+        total = len(candle_list)
+        for i, bar in enumerate(candle_list):
+            self.kline(bar)
+            if on_bar:
+                on_bar(bar)
+            if progress and total >= 10_000 and (i + 1) % 10_000 == 0:
+                pct = (i + 1) / total * 100
+                print(f"[backtest] {i+1:,}/{total:,} bars ({pct:.1f}%)")
+
+        if progress:
+            print(f"[backtest] Done — {total:,} bars processed")
+
+        return BacktestResult.from_exchange(self)
+
     def start(self):
-        ...
+        """Alias kept for backward compatibility. Use run() instead."""
+        raise NotImplementedError("Use exchange.run(candles) to start a backtest.")
 
 
