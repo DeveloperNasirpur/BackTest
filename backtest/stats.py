@@ -117,6 +117,16 @@ class BacktestResult:
 
     # ── display ───────────────────────────────────────────────────────────
 
+    def save_report(
+        self,
+        path: str = "backtest_report.html",
+        *,
+        title: str = "Backtest Report",
+    ) -> str:
+        """Shortcut: result.save_report('report.html', title='My Strategy')"""
+        from backtest.report import save_report as _sr
+        return _sr(self, path, title=title)
+
     def summary(self) -> str:
         sep = "─" * 48
         lines = [

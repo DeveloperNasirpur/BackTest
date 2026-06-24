@@ -42,6 +42,7 @@ from backtest.utils.postgres_loader import load_postgres
 from backtest.utils.demo import demo_candles
 from backtest.utils.binance_loader import load_binance
 from backtest.stats import BacktestResult
+from backtest.report import save_report
 from trex.source.binance import CandleSourceBinance
 
 __version__ = "2.0.0"
@@ -60,6 +61,7 @@ __all__ = [
     "load_binance",
     # ── results ───────────────────────────────────────────────────────────
     "BacktestResult",
+    "save_report",
     # ── low-level (advanced use) ──────────────────────────────────────────
     "Exchange",
     "StrategyBase",
