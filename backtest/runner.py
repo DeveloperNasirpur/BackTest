@@ -13,7 +13,6 @@ from backtest.playback import PlaybackController
 from backtest.stats import BacktestResult
 from backtest.strategy import Strategy
 from trex.base.ohlcv import OHLCV
-from trex.source.candle_source import CandleSource
 
 # Max real-time interval between bt_state/bt_progress broadcasts (seconds).
 # At max speed (speed=0) this caps broadcasts at ~10 fps to avoid flooding.
@@ -209,7 +208,7 @@ class Backtest:
 
     def run(
         self,
-        source,
+        candles,
         *,
         progress: bool = True,
     ) -> BacktestResult:
@@ -228,9 +227,10 @@ class Backtest:
 
         Parameters
         ----------
-        source:
-            CandleSource (e.g. CandleSourceBinance) — streaming, callback-based;
-            or an iterable of OHLCV bars (list[OHLCV], load_csv(), etc.).
+        candles:
+            Iterable of OHLCV bars — use load_binance(), load_csv(),
+            load_postgres(), demo_candles(), or any list[OHLCV].
+            Candle downloading is handled by Trex_engin (CandleSourceBinance).
         progress:
             Print progress every 10 000 bars (default True).
 
@@ -239,12 +239,7 @@ class Backtest:
         BacktestResult with win rate, profit factor, drawdown, etc.
         """
         s = self._strategy
-        if isinstance(source, CandleSource):
-            candles: list = []
-            source.on_provide = candles.append
-            source.run()
-        else:
-            candles = list(source)
+        candles = list(candles)
         total = len(candles)
 
         if total == 0:

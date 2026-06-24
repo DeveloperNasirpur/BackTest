@@ -1,18 +1,18 @@
 """
-مثال ۷ — داده واقعی Binance + بک‌تست
-======================================
+مثال ۷ — دانلود داده واقعی از Binance و بک‌تست
+================================================
 نیازمندی: اینترنت (بدون API Key)
 
 جریان داده:
-    CandleSourceBinance → on_provide callback → Backtest
-    هر bar: trex.push(1m) → CTF → indicator → TrexTerminal
+    load_binance() → list[OHLCV] → Backtest.run()
+    هر bar: trex.push() → CTF → indicator → TrexTerminal
             exchange.kline() → position management
             strategy.on_kline() → user logic
 
 اجرا:
     python examples/07_binance_data.py
 """
-from backtest import Backtest, Strategy, CandleSourceBinance
+from backtest import Backtest, Strategy, load_binance
 
 
 class RSIStrategy(Strategy):
@@ -35,9 +35,8 @@ class RSIStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    # CandleSourceBinance به عنوان source داده می‌شود — نه list
-    # Backtest به صورت خودکار on_provide را تنظیم می‌کند
-    result = Backtest(RSIStrategy).run(
-        CandleSourceBinance("BTCUSDT", days=90)
-    )
+    print("در حال دانلود داده از Binance...")
+    bars = load_binance("BTCUSDT", "1m", days=90)
+
+    result = Backtest(RSIStrategy).run(bars)
     print(result.summary())

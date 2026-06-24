@@ -43,7 +43,6 @@ from backtest.utils.demo import demo_candles
 from backtest.utils.binance_loader import load_binance
 from backtest.stats import BacktestResult
 from backtest.report import save_report
-from trex.source.binance import CandleSourceBinance
 
 __version__ = "2.0.0"
 
@@ -51,7 +50,6 @@ __all__ = [
     # ── main API ──────────────────────────────────────────────────────────
     "Backtest",
     "Strategy",
-    "CandleSourceBinance",
     # ── data loading ──────────────────────────────────────────────────────
     "demo_candles",
     "load_csv",

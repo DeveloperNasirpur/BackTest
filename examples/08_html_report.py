@@ -2,13 +2,12 @@
 مثال ۸ — گزارش HTML از نتیجه بک‌تست
 ======================================
 خروجی: یک فایل .html که در مرورگر باز می‌شود
-       نمودار equity، آمار کامل، جدول معاملات
 
 اجرا:
     python examples/08_html_report.py
-    # سپس: open btcusdt_report.html
+    open btcusdt_report.html
 """
-from backtest import Backtest, Strategy, CandleSourceBinance, save_report
+from backtest import Backtest, Strategy, load_binance, save_report
 
 
 class RSIStrategy(Strategy):
@@ -31,18 +30,15 @@ class RSIStrategy(Strategy):
 
 
 if __name__ == "__main__":
-    print("در حال اجرای بک‌تست با داده واقعی Binance...")
-    result = Backtest(RSIStrategy).run(
-        CandleSourceBinance("BTCUSDT", days=90)
-    )
+    print("در حال دانلود داده از Binance...")
+    bars = load_binance("BTCUSDT", "1h", days=90)
 
+    result = Backtest(RSIStrategy).run(bars)
     print(result.summary())
 
-    # ذخیره گزارش HTML
     path = save_report(
         result,
         "btcusdt_report.html",
         title="BTCUSDT RSI Strategy — 90 Days",
     )
     print(f"\nگزارش HTML ذخیره شد: {path}")
-    print("در مرورگر باز کنید تا نمودار و جزئیات معاملات را ببینید.")
